@@ -1,79 +1,164 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// The screenshot scenes behind ?shot=cover|foot|drive|mission. Each one stages a
+// real game state (mission, stars, police, traffic) and plays it forward with a
+// simple autopilot, so the frame is what a short game really looks like and the
+// same seed always gives the same frame.
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+import { STEP } from './config.js';
+import { SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+function angleDiff(a, b) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
+/** Steer a car toward (tx, ty): full throttle, turn toward the target. */
+function driveToward(game, tx, ty) {
+  const p = game.player.state;
+  const want = Math.atan2(ty - p.y, tx - p.x);
+  const d = angleDiff(p.angle, want);
+  return { x: d > 0.15 ? 1 : d < -0.15 ? -1 : 0, y: -1 };
 }
 
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+/** Walk toward (tx, ty) on foot. */
+function walkToward(game, tx, ty) {
+  const p = game.player.state;
+  const want = Math.atan2(ty - p.y, tx - p.x);
+  return { x: Math.cos(want), y: Math.sin(want) };
+}
+
+function putPlayerInCar(game, x, y, angle, speed, carHealth) {
+  const car = game.traffic.spawnCar(x, y, false);
+  car.angle = angle;
+  car.speed = speed;
+  car.color = '#ffcf3d';
+  game.player.state.car = car;
+  game.player.state.onFoot = false;
+  game.player.state.carHealth = carHealth;
+  game.player.state.x = x;
+  game.player.state.y = y;
+  game.player.state.angle = angle;
+  game.player.state.speed = speed;
+  return car;
+}
+
+function stageCover(game) {
+  // The finale, mid-chase: five stars, cruisers behind, the tank ahead, Air One
+  // overhead, the marina boat in sight. The player runs east along street 1440
+  // so the camera can centre him clear of the HUD banners below; the tank is
+  // placed ahead on the same road, nose to nose with the chase.
+  game.missions.state.index = 4;
+  game.missions.state.lineIndex = 0;
+  game.cash = 2450;
+  game.time = 126;
+  putPlayerInCar(game, 1500, 1440, 0, 380, 78);
+  game.camera.x = 1500;
+  game.camera.y = 1440;
+  game.police.setStars(5);
+  game.police.state.roadblockTimer = 0;
+  game.police.state.tank = { x: 2250, y: 1440, angle: Math.PI, speed: 0, health: 400, radius: 26 };
+  const c1 = game.police.spawnCruiser(1320, 1420, false);
+  c1.speed = 420; c1.angle = 0;
+  const c2 = game.police.spawnCruiser(1280, 1470, true);
+  c2.speed = 460; c2.angle = 0;
+  const c3 = game.police.spawnCruiser(1390, 1400, false);
+  c3.speed = 400; c3.angle = 0;
+  void c1; void c2; void c3;
+  // Only 45 steps: the car is still at speed when the frame is taken, short of
+  // the roadblock that forms 420px ahead of it.
+  for (let i = 0; i < 45; i += 1) {
+    game.advance(STEP, driveToward(game, 2400, 1440), false);
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+  return { screen: SCREEN_PLAY };
+}
+
+function stageFoot(game) {
+  // Jax on foot in Neon Row, walking to his first job, city alive around him.
+  // Only one second of walking: far enough to be moving, nowhere near the
+  // garage, so the first mission stays open and the stars stay at zero.
+  game.missions.state.index = 0;
+  game.cash = 120;
+  game.time = 40;
+  game.player.state.x = 1000;
+  game.player.state.y = 620;
+  game.player.state.onFoot = true;
+  game.camera.x = 1000;
+  game.camera.y = 620;
+  for (let i = 0; i < 60; i += 1) {
+    game.advance(STEP, walkToward(game, 1160, 300), false);
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  return { screen: SCREEN_PLAY };
+}
+
+function stageDrive(game) {
+  // The Neon Run: two stars, a cruiser on the tail, traffic ahead, drop-off east.
+  // The autopilot steers straight, so the run stays on one road — east along
+  // street 800 — instead of cutting diagonally across blocks.
+  game.missions.state.index = 1;
+  game.cash = 400;
+  game.time = 60;
+  putPlayerInCar(game, 800, 800, 0, 340, 100);
+  game.camera.x = 800;
+  game.camera.y = 800;
+  game.police.setStars(2);
+  const c = game.police.spawnCruiser(620, 800, false);
+  c.speed = 380; c.angle = 0;
+  void c;
+  // 90 steps: long enough to be at speed, short enough not to rear-end the
+  // traffic ahead and stop.
+  for (let i = 0; i < 90; i += 1) {
+    game.advance(STEP, driveToward(game, 2320, 800), false);
+  }
+  return { screen: SCREEN_PLAY };
+}
+
+function stageMission(game) {
+  // Air One: four stars, the helicopter's spotlight sweeping, tunnel to the west.
+  // The run stays on one road — west along street 1440 — so the car is driving,
+  // not wedged on a building corner.
+  game.missions.state.index = 3;
+  game.cash = 1550;
+  game.time = 96;
+  // The car starts east of the intersection, clear of the traffic stopped at
+  // its red light, and runs 60 steps west — at speed, short of the car ahead.
+  putPlayerInCar(game, 1600, 1440, Math.PI, 360, 88);
+  game.camera.x = 1600;
+  game.camera.y = 1440;
+  game.police.setStars(4);
+  // No roadblock in this frame: it would form 420px ahead of the car and the
+  // car would drive straight into it and stop. The helicopter and the cruiser
+  // carry the four-star chase here.
+  game.police.state.roadblockTimer = 999;
+  const c = game.police.spawnCruiser(1820, 1440, true);
+  c.speed = 430; c.angle = Math.PI;
+  void c;
+  for (let i = 0; i < 30; i += 1) {
+    game.advance(STEP, driveToward(game, 200, 1440), false);
+  }
+  return { screen: SCREEN_PLAY };
+}
+
+/** Set `game` to the named scene and return the screen to draw over it. */
+export function stageShot(name, game) {
+  game.missions.reset();
+  game.player.reset();
+  game.police.reset();
+  game.traffic.reset();
+  game.cash = 0;
+  game.banner = null;
+  game.bustedLoss = 0;
+  game.particles.length = 0;
+  game.skids.length = 0;
+  game.camera.shake = 0;
+  game.time = 0;
+  if (name === 'cover') return stageCover(game);
+  if (name === 'foot') return stageFoot(game);
+  if (name === 'drive') return stageDrive(game);
+  if (name === 'mission') return stageMission(game);
+  // Any other name is the title backdrop: the city at dusk, camera downtown.
+  game.camera.x = 1280;
+  game.camera.y = 900;
+  game.time = 30;
+  return { screen: SCREEN_TITLE };
 }

@@ -1,22 +1,33 @@
-// A small seeded random number generator (mulberry32): the same seed gives the same
-// city, traffic and screenshot scenes, which is what makes the shots repeatable.
+// A tiny seeded random generator, so the city, the traffic and the screenshot
+// scenes come out the same every run for the same seed.
 
-export function createRandom(seed) {
-  let a = seed | 0;
-  return function random() {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+export function makeRandom(seed) {
+  let s = (seed >>> 0) || 1;
+  function next() {
+    // xorshift32: cheap, deterministic, good enough for a city.
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    s >>>= 0;
+    return s / 4294967296;
+  }
+  return {
+    next,
+    /** A float in [min, max). */
+    range(min, max) {
+      return min + (max - min) * next();
+    },
+    /** An integer in [min, max]. */
+    int(min, max) {
+      return min + Math.floor(next() * (max - min + 1));
+    },
+    /** One element of an array. */
+    pick(items) {
+      return items[Math.floor(next() * items.length)];
+    },
+    /** True with probability p. */
+    chance(p) {
+      return next() < p;
+    },
   };
-}
-
-/** Pick one of `list` with the seeded generator. */
-export function pick(random, list) {
-  return list[Math.floor(random() * list.length) % list.length];
-}
-
-/** A number in [min, max) from the seeded generator. */
-export function range(random, min, max) {
-  return min + random() * (max - min);
 }

@@ -29,15 +29,17 @@ if (!existsSync(join(gameDir, 'index.html')) || !statSync(join(gameDir, 'index.h
   throw new Error('game/index.html is missing: the game cannot be entered without it');
 }
 
+const shotsOut = join(out, 'screenshots');
+
 mkdirSync(out, { recursive: true });
 cpSync(gameDir, join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(shotsDir)) cpSync(shotsDir, join(out, 'screenshots'), { recursive: true });
+mkdirSync(shotsOut, { recursive: true });
+if (existsSync(shotsDir)) cpSync(shotsDir, shotsOut, { recursive: true });
 
 // The gate wants three or four screenshots of the game itself, so refuse an
 // entry that would arrive with none (a stale clone, a missed copy).
-const shotFiles = existsSync(join(out, 'screenshots'))
-  ? readdirSync(join(out, 'screenshots')).filter((f) => /\.(jpg|jpeg|png)$/i.test(f))
+const shotFiles = existsSync(shotsOut)
+  ? readdirSync(shotsOut).filter((f) => /\.(jpg|jpeg|png)$/i.test(f))
   : [];
 if (shotFiles.length === 0) {
   throw new Error('screenshots/ holds no images: the entry needs 3-4 real renders of the game');

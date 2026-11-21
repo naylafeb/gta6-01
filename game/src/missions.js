@@ -1,76 +1,90 @@
-// The story arc: five jobs from Lena and Brick, ending in a five-star escape by
-// boat. Each mission names its target, pays cash on completion, and hands the
-// player its briefing lines for the dialogue box.
+// The five jobs: Hot Start, Neon Run, Beachfront Heat, Air One, Five-Star
+// Dawn. Each one is a target on the map and a line or two from the crew; the
+// heat and the helicopter join in as the arc climbs toward five stars.
 
-import { MISSIONS } from './config.js';
-
-export const EVENT_MISSION_DONE = 1;
-export const EVENT_ALL_DONE = 2;
+import { HIDEOUT, MISSIONS } from './config.js';
 
 export function createMissions() {
-  const state = { index: 0, done: false, lineIndex: 0, lineTimer: 0, flash: 0 };
-
-  function reset() {
-    state.index = 0;
-    state.done = false;
-    state.lineIndex = 0;
-    state.lineTimer = 0;
-    state.flash = 0;
-  }
+  const state = { index: 0, lineIndex: 0, done: false, started: false };
 
   function current() {
     return MISSIONS[Math.min(state.index, MISSIONS.length - 1)];
   }
 
-  function line() {
-    const m = current();
-    return m.lines[Math.min(state.lineIndex, m.lines.length - 1)];
-  }
-
-  /** One fixed step. Returns event flags when a mission completes. */
-  function step(dt, player, police) {
-    let events = 0;
-    if (state.done) return events;
-    const m = current();
-    state.lineTimer += dt;
-    if (state.lineTimer > 7 && state.lineIndex < m.lines.length - 1) {
-      state.lineIndex += 1;
-      state.lineTimer = 0;
-    }
-    if (state.flash > 0) state.flash -= dt;
-
-    // Mission 3 is a cooldown job: reach the hideout, then lose every star.
-    if (m.id === 'beachfront-heat') {
-      const d = Math.hypot(player.state.x - m.target.x, player.state.y - m.target.y);
-      if (d < m.target.r && police.state.stars === 0) {
-        events |= EVENT_MISSION_DONE;
+  return {
+    state,
+    reset() {
+      state.index = 0;
+      state.lineIndex = 0;
+      state.done = false;
+      state.started = false;
+    },
+    current,
+    /** True when the player stands inside the hideout circle. */
+    atHideout(player) {
+      if (!player) return false;
+      return Math.hypot(player.x - HIDEOUT.x, player.z - HIDEOUT.z) < HIDEOUT.r;
+    },
+    /** Begin the current mission: its opening line and its heat. */
+    start(game) {
+      const m = current();
+      state.started = true;
+      state.lineIndex = 0;
+      game.say(m.lines[0]);
+      if (m.id === 'neon-run') game.police.addHeat(40);
+      if (m.id === 'air-one') game.police.setStars(4);
+      if (m.id === 'five-star-dawn') game.police.setStars(5);
+    },
+    /** The mission's target marker, or null once the arc is done. */
+    target() {
+      if (state.done) return null;
+      return current().target;
+    },
+    /** The mission's title line for the HUD card. */
+    title() {
+      if (state.done) return 'All jobs done';
+      return current().title;
+    },
+    /** The objective line for the HUD card. */
+    objective(game) {
+      if (state.done) return 'Reach the boat. Sail out of Solmar Bay.';
+      const m = current();
+      if (m.id === 'hot-start' && game.player.state.onFoot) return 'Steal a car — any car — then reach the marker.';
+      if (m.id === 'beachfront-heat') return 'Lose the heat, then reach the hideout marker.';
+      return `Reach the marker: ${m.target.label}.`;
+    },
+    /** Called every step: arrive at the marker and the job pays out. */
+    update(game) {
+      if (state.done) return;
+      const player = game.player.state;
+      const m = current();
+      const d = Math.hypot(player.x - m.target.x, player.z - m.target.z);
+      // The beachfront job only counts once the heat is down.
+      if (m.id === 'beachfront-heat' && game.police.stars > 1) return;
+      // The first job needs wheels before it counts.
+      if (m.id === 'hot-start' && player.onFoot) return;
+      if (d > m.target.r) return;
+      game.cash += m.reward;
+      game.audio.missionDone();
+      game.say(`JOB DONE: ${m.title} — $${m.reward} in the bag.`);
+      if (state.index >= MISSIONS.length - 1) {
+        state.done = true;
+        game.onMissionArcDone();
+        return;
       }
-      return events;
-    }
-    const d = Math.hypot(player.state.x - m.target.x, player.state.y - m.target.y);
-    if (d < m.target.r) {
-      events |= EVENT_MISSION_DONE;
-      if (state.index >= MISSIONS.length - 1) events |= EVENT_ALL_DONE;
-    }
-    return events;
-  }
-
-  function advance() {
-    state.index += 1;
-    state.lineIndex = 0;
-    state.lineTimer = 0;
-    state.flash = 3;
-    if (state.index >= MISSIONS.length) state.done = true;
-  }
-
-  /** Scripted heat when a mission starts: jobs 2, 4 and 5 open hot. */
-  function heatOnStart(police) {
-    const m = current();
-    if (m.id === 'neon-run') police.setStars(2);
-    else if (m.id === 'beachfront-heat') police.setStars(3);
-    else if (m.id === 'air-one') police.setStars(4);
-    else if (m.id === 'five-star-dawn') police.setStars(5);
-  }
-
-  return { state, reset, step, advance, current, line, heatOnStart };
+      state.index += 1;
+      state.lineIndex = 0;
+      this.start(game);
+    },
+    /** The next crew line, for the dialogue box's tap-to-continue. */
+    nextLine(game) {
+      const m = current();
+      if (state.lineIndex < m.lines.length - 1) {
+        state.lineIndex += 1;
+        game.say(m.lines[state.lineIndex]);
+        return true;
+      }
+      return false;
+    },
+  };
 }

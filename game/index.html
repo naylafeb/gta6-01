@@ -3,17 +3,146 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Five-Star Heat — Solmar Bay</title>
+<title>Five-Star Heat 3D — Solmar Bay</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #241a3e; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #241a3e; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
+  .panel { position: fixed; background: rgba(16, 12, 28, 0.78); color: #f4efe6; border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(2px); box-shadow: 0 2px 14px rgba(0,0,0,0.45); }
+  .panel h2 { margin: 0 0 2px; font-size: 22px; letter-spacing: 1px; }
+  .panel .sub { color: #b9b0a4; font-size: 11px; letter-spacing: 2px; }
+  .bar { height: 6px; background: #2c2740; border-radius: 3px; overflow: hidden; margin: 3px 0 6px; }
+  .bar > div { height: 100%; background: #ffc53c; }
+  #mission-card { top: 14px; left: 14px; width: 300px; }
+  #mission-objective { font-size: 13px; color: #ffe9a8; margin-top: 4px; }
+  #wanted-card { top: 14px; right: 14px; width: 300px; text-align: right; }
+  #wanted-stars { font-size: 26px; letter-spacing: 3px; line-height: 1; }
+  #wanted-stars .star { color: #5a5470; }
+  #wanted-stars .star.on { color: #ffd23c; text-shadow: 0 0 8px #ffd23c; }
+  #wanted-state { font-size: 11px; letter-spacing: 2px; color: #b9b0a4; }
+  #wanted-state.hot { color: #ff534d; }
+  #cash { font-size: 22px; color: #54d97b; font-weight: 700; }
+  #clock { font-size: 13px; color: #b9b0a4; margin-left: 10px; }
+  .vital { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 1px; }
+  .vital .bar { flex: 1; margin: 0; }
+  .vital .bar > div { background: #54d97b; }
+  .vital .bar.armour > div { background: #37e0ff; }
+  .vital b { width: 26px; text-align: right; }
+  #weapon-slots { display: flex; gap: 6px; margin-top: 8px; }
+  .slot { flex: 1; border: 1px solid #4a4468; border-radius: 6px; padding: 5px 8px; font-size: 12px; color: #b9b0a4; }
+  .slot.active { border-color: #ffd23c; color: #f4efe6; background: rgba(255, 210, 60, 0.12); }
+  .slot-key { display: inline-block; background: #ffd23c; color: #100c1c; border-radius: 3px; font-size: 10px; font-weight: 700; padding: 1px 5px; margin-right: 4px; }
+  #crew-list { margin-top: 8px; font-size: 12px; }
+  .crew { display: flex; gap: 6px; align-items: center; padding: 2px 0; }
+  .crew-key { display: inline-block; background: #37e0ff; color: #100c1c; border-radius: 3px; font-size: 10px; font-weight: 700; padding: 1px 5px; }
+  .crew span:last-child { color: #b9b0a4; }
+  #dispatch-card { top: 340px; right: 14px; width: 300px; font-size: 12px; }
+  #dispatch-card .sub { display: block; margin-bottom: 5px; }
+  .dispatch-row { display: flex; gap: 6px; padding: 2px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+  .dispatch-row span { margin-left: auto; color: #b9b0a4; }
+  .dispatch-row em { font-style: normal; color: #ff534d; }
+  .dispatch-empty { color: #b9b0a4; }
+  #map-card { left: 14px; bottom: 14px; padding: 8px; }
+  #district { font-size: 13px; font-weight: 700; letter-spacing: 1px; margin: 0 0 4px 2px; }
+  #district small { display: block; color: #b9b0a4; font-weight: 400; letter-spacing: 2px; font-size: 10px; }
+  #minimap { display: block; width: 220px; height: 220px; border-radius: 50%; border: 3px solid rgba(244, 239, 230, 0.35); background: #0c0a18; }
+  #speed-card { right: 14px; bottom: 14px; width: 210px; text-align: right; }
+  #speed-num { font-size: 44px; font-weight: 800; line-height: 1; }
+  #speed-num small { font-size: 14px; color: #b9b0a4; font-weight: 400; }
+  #car-name { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+  #speed-card .bar { margin-top: 6px; }
+  #speed-card .bar > div { background: #ff7a3c; }
+  #radio-name { font-size: 11px; color: #b9b0a4; letter-spacing: 1px; margin-top: 4px; }
+  #dialogue-card { left: 50%; bottom: 16px; transform: translateX(-50%); width: 460px; display: flex; gap: 10px; align-items: flex-start; }
+  #dialogue-avatar { width: 40px; height: 40px; border-radius: 6px; background: #37e0ff; color: #100c1c; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+  #dialogue { font-size: 13px; line-height: 1.45; }
+  #dialogue-name { font-weight: 700; color: #37e0ff; font-size: 11px; letter-spacing: 2px; }
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(12, 8, 24, 0.72); color: #f4efe6; text-align: center; z-index: 10; }
+  .screen.hidden { display: none; }
+  .screen h1 { font-size: 52px; margin: 0; letter-spacing: 3px; color: #ffd23c; text-shadow: 0 0 24px rgba(255, 122, 60, 0.6); }
+  .screen p { max-width: 560px; font-size: 15px; line-height: 1.6; color: #d8d0c4; }
+  .screen .keys { font-size: 13px; color: #b9b0a4; }
+  .screen .cta { margin-top: 18px; font-size: 15px; letter-spacing: 2px; color: #ffd23c; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
+<script type="importmap">{"imports": {"three": "./vendor/three.module.min.js"}}</script>
 </head>
 <body>
-<canvas id="game" aria-label="Five-Star Heat: an open-world crime game in Solmar Bay. Drive, run jobs, and outrun the police at five stars."></canvas>
+<canvas id="game" aria-label="Five-Star Heat 3D: an open-world crime game in Solmar Bay. Drive, run jobs, and outrun the police at five stars."></canvas>
+
+<div class="panel" id="mission-card">
+  <div class="sub">MISSION <span id="mission-count">1 OF 5</span></div>
+  <h2 id="mission-title">Hot Start</h2>
+  <div class="bar"><div id="mission-stage" style="width: 0%"></div></div>
+  <div id="mission-objective">Steal a car, then reach the marker.</div>
+</div>
+
+<div class="panel" id="wanted-card">
+  <div class="sub">WANTED</div>
+  <div id="wanted-stars"></div>
+  <div id="wanted-state">CLEAN</div>
+  <div><span id="cash">$120</span><span id="clock">16:24</span></div>
+  <div class="vital">HEALTH <div class="bar"><div id="health-fill" style="width: 100%"></div></div><b id="health-num">100</b></div>
+  <div class="vital">ARMOUR <div class="bar armour"><div id="armour-fill" style="width: 100%"></div></div><b id="armour-num">50</b></div>
+  <div id="weapon-slots"></div>
+  <div id="crew-list"></div>
+</div>
+
+<div class="panel" id="dispatch-card">
+  <span class="sub">SOLMAR PD DISPATCH</span>
+  <div id="dispatch-list"></div>
+</div>
+
+<div class="panel" id="map-card">
+  <div id="district">Neon Row<small>SOLMAR BAY</small></div>
+  <canvas id="minimap" width="220" height="220"></canvas>
+</div>
+
+<div class="panel" id="speed-card">
+  <div><span id="speed-num">0</span> <small>KM/H</small></div>
+  <div id="car-name">ON FOOT</div>
+  <div class="bar"><div id="engine-fill" style="width: 100%"></div></div>
+  <div id="radio-name">Solmar FM 88.4</div>
+</div>
+
+<div class="panel" id="dialogue-card">
+  <div id="dialogue-avatar">LB</div>
+  <div><div id="dialogue-name">LENA</div><div id="dialogue"></div></div>
+</div>
+
+<div class="screen" id="screen-title">
+  <h1>FIVE-STAR HEAT</h1>
+  <p>Solmar Bay at dusk. Steal a car, run five jobs for Lena and Brick, and outrun
+  Solmar PD from one star to five — cruisers, roadblocks, Air One overhead, and
+  at five stars, the tank. Reach the boat at the marina and you are free.</p>
+  <p class="keys">WASD drive &amp; walk · E get in / out of a car · F punch · Click shoot · Space handbrake<br>
+  1 / 2 switch weapon · R radio · M mute · P pause</p>
+  <div class="cta">CLICK OR PRESS ENTER TO START</div>
+</div>
+
+<div class="screen hidden" id="screen-pause">
+  <h1>PAUSED</h1>
+  <p>The city waits. Press P or click to keep running.</p>
+</div>
+
+<div class="screen hidden" id="screen-busted">
+  <h1>BUSTED</h1>
+  <p>Solmar PD caught up with you. $500 bail, and the job starts over from where it stood.</p>
+  <div class="cta">CLICK OR PRESS ENTER TO RETRY</div>
+</div>
+
+<div class="screen hidden" id="screen-win">
+  <h1>FIVE-STAR DAWN</h1>
+  <p>You made the boat. Solmar Bay shrinks behind you, sirens fading into the dawn —
+  five stars, five jobs, one clean getaway.</p>
+  <div class="cta">CLICK OR PRESS ENTER FOR THE TITLE SCREEN</div>
+</div>
+
 <p id="status" role="status" aria-live="polite"></p>
-<script type="module" src="./src/main.js"></script>
+<script type="module">
+  import { createGame } from './src/main.js';
+  const params = new URLSearchParams(window.location.search);
+  const seed = Number(params.get('seed') || 7);
+  createGame(document.getElementById('game'), Number.isFinite(seed) ? seed : 7);
+</script>
 </body>
 </html>

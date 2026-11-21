@@ -1,75 +1,93 @@
-// Keyboard and pointer input. Held keys give a two-axis steering vector; one-shot
-// presses (confirm, pause, interact, punch, handbrake, radio, mute) are queued as bit
-// flags and taken once by the loop, so a press between two frames is never lost.
+// Keyboard and mouse input, read once a frame. WASD drives and walks, E gets in
+// and out of cars, F punches, Space is the handbrake, P pauses, M mutes, and a
+// mouse click fires the pistol.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
-export const ACTION_INTERACT = 4;
-export const ACTION_PUNCH = 8;
-export const ACTION_HANDBRAKE = 16;
-export const ACTION_RADIO = 32;
-export const ACTION_MUTE = 64;
-
-const KEYMAP = {
-  ArrowUp: 'up', KeyW: 'up',
-  ArrowDown: 'down', KeyS: 'down',
-  ArrowLeft: 'left', KeyA: 'left',
-  ArrowRight: 'right', KeyD: 'right',
+export const KEYS = {
+  up: ['KeyW', 'ArrowUp'],
+  down: ['KeyS', 'ArrowDown'],
+  left: ['KeyA', 'ArrowLeft'],
+  right: ['KeyD', 'ArrowRight'],
+  run: ['ShiftLeft', 'ShiftRight'],
+  brake: ['Space'],
+  interact: ['KeyE'],
+  punch: ['KeyF'],
+  pause: ['KeyP', 'Escape'],
+  mute: ['KeyM'],
+  radio: ['KeyR'],
 };
 
-export function createInput(target) {
-  const held = { up: false, down: false, left: false, right: false };
-  let actions = 0;
+export function createInput() {
+  const down = new Set();
+  const pressed = new Set();
+  let mouseDown = false;
+  let mousePressed = false;
+  let listening = false;
 
-  function press(code, event) {
-    if (KEYMAP[code]) {
-      held[KEYMAP[code]] = true;
-    } else if (code === 'Space' || code === 'Enter') {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (code === 'KeyP' || code === 'Escape') {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else if (code === 'KeyE') {
-      if (!event.repeat) actions |= ACTION_INTERACT;
-    } else if (code === 'KeyF') {
-      if (!event.repeat) actions |= ACTION_PUNCH;
-    } else if (code === 'ShiftLeft' || code === 'ShiftRight') {
-      if (!event.repeat) actions |= ACTION_HANDBRAKE;
-    } else if (code === 'KeyR') {
-      if (!event.repeat) actions |= ACTION_RADIO;
-    } else if (code === 'KeyM') {
-      if (!event.repeat) actions |= ACTION_MUTE;
-    } else {
-      return;
+  function keyDown(e) {
+    if (e.repeat) return;
+    down.add(e.code);
+    pressed.add(e.code);
+  }
+  function keyUp(e) {
+    down.delete(e.code);
+  }
+  function onMouseDown(e) {
+    if (e.button === 0) {
+      mouseDown = true;
+      mousePressed = true;
     }
-    event.preventDefault();
+  }
+  function onMouseUp(e) {
+    if (e.button === 0) mouseDown = false;
+  }
+  function onBlur() {
+    down.clear();
+    mouseDown = false;
   }
 
-  window.addEventListener('keydown', (event) => press(event.code, event));
-  window.addEventListener('keyup', (event) => {
-    const dir = KEYMAP[event.code];
-    if (dir) held[dir] = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go on blur.
-  window.addEventListener('blur', () => {
-    held.up = held.down = held.left = held.right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
-
   return {
-    /** { x: -1..1, y: -1..1 } steering vector from the held keys. */
-    vector() {
-      return {
-        x: (held.right ? 1 : 0) - (held.left ? 1 : 0),
-        y: (held.down ? 1 : 0) - (held.up ? 1 : 0),
-      };
+    attach() {
+      if (listening) return;
+      listening = true;
+      window.addEventListener('keydown', keyDown);
+      window.addEventListener('keyup', keyUp);
+      window.addEventListener('mousedown', onMouseDown);
+      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('blur', onBlur);
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
+    detach() {
+      if (!listening) return;
+      listening = false;
+      window.removeEventListener('keydown', keyDown);
+      window.removeEventListener('keyup', keyUp);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('blur', onBlur);
+    },
+    /** True while any of the named keys is held. */
+    held(name) {
+      return KEYS[name].some((code) => down.has(code));
+    },
+    /** True only on the frame the key went down. */
+    hit(name) {
+      return KEYS[name].some((code) => pressed.has(code));
+    },
+    get mouseDown() {
+      return mouseDown;
+    },
+    get mousePressed() {
+      return mousePressed;
+    },
+    /** Steering -1 (left) to 1 (right), throttle -1 to 1, from the keys. */
+    axes() {
+      const x = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
+      const y = (this.held('up') ? 1 : 0) - (this.held('down') ? 1 : 0);
+      return { x, y };
+    },
+    /** Clear the edge-triggered sets at the end of a frame. */
+    endFrame() {
+      pressed.clear();
+      mousePressed = false;
     },
   };
 }

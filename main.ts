@@ -1,12 +1,13 @@
-// Five-Star Heat: the entry program (Node 22, standard library only). The game is
-// the static files under game/ — plain HTML and ES modules a desktop browser loads
-// offline, no build step and no network request — and the screenshots in
-// screenshots/. This program hands both in: it copies game/ and screenshots/ from
-// beside this file to /output and writes /output/dossier.json, the summary the
-// judge reads, with the vendored make.fun library. The game itself is a 2D canvas
-// open world in Solmar Bay: drive and walk a coastal city, run five story jobs,
-// and outrun Solmar PD from one star to five — cruisers, roadblocks, a helicopter
-// and, at five stars, a tank.
+// Five-Star Heat 3D: the entry program (Node 22, standard library only). The game
+// is the static files under game/ — plain HTML and ES modules a desktop browser
+// loads offline, no build step and no network request — and the screenshots in
+// screenshots/. This program hands both in: it copies game/ and screenshots/
+// from beside this file to /output and writes /output/dossier.json, the summary
+// the judge reads, with the vendored make.fun library. The game itself is a 3D
+// open world in Solmar Bay, built on a vendored three.js: drive and walk a
+// coastal city, run five story jobs, and outrun Solmar PD from one star to
+// five — cruisers, roadblocks, a helicopter and, at five stars, a tank — with a
+// full HUD: mission card, wanted stars, dispatch list, minimap and speedometer.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
